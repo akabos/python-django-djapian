@@ -1,0 +1,30 @@
+Source: python-django-djapian
+Priority: optional
+Maintainer: Mikhail Lukyanchenko <ml@zhishi.ru>
+Build-Depends: debhelper (>= 7.0.50)
+Build-Depends-Indep: python-support
+Standards-Version: 3.8.1
+Section: python
+Homepage: http://code.google.com/p/djapian/
+
+Package: python-django-djapian
+Architecture: all
+Depends: ${python:Depends}, ${misc:Depends}, python-django (>= 1.0), python-xapian (>= 1.0.2)
+Description: Search API for Django with Xapian
+ Use this package to allow full-text search in your Django Project.
+ .
+ Most of the features provided by Xapian itself and Djapian in this case
+ plays role only as Django-compatible adaptation.
+ .
+ Djapian features
+ .
+   * High-level DSL for indexer declaration
+   * Standard result pagination support
+   * Indexing of field, method results and related model attributes
+   * Entry filtering (by trigger function)
+   * Term tagging
+   * Spelling corrections
+   * Stemming
+   * Result ordering by fields
+   * Indexers auto discovery
+   * Index shell

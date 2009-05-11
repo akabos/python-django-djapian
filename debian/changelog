@@ -1,0 +1,5 @@
+python-django-djapian (2.1.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #528247)
+
+ -- Mikhail Lukyanchenko <ml@zhishi.ru>  Mon, 11 May 2009 21:34:56 +0400

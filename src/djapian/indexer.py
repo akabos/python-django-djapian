@@ -5,10 +5,12 @@ from django.db import models
 from django.utils.itercompat import is_iterable
 from djapian.signals import post_save, pre_delete
 from django.conf import settings
-from django.utils.encoding import smart_unicode
+from django.utils.encoding import smart_unicode, force_unicode
 
 from djapian.resultset import ResultSet
 from djapian import utils, decider
+from djapian.utils.paging import paginate
+from djapian.utils.commiter import Commiter
 
 import xapian
 
@@ -38,26 +40,29 @@ class Field(object):
         value = field_value
 
         if isinstance(content_type, (models.IntegerField, int, long)):
-            #
             # Integer fields are stored with 12 leading zeros
-            #
             value = '%012d' % field_value
         elif isinstance(content_type, (models.BooleanField, bool)):
-            #
             # Boolean fields are stored as 't' or 'f'
-            #
             if field_value:
                 value = 't'
             else:
                 value = 'f'
         elif isinstance(content_type, (models.DateTimeField, datetime.datetime)):
-            #
-            # DateTime fields are stored as %Y%m%d%H%M%S (better
-            # sorting)
-            #
+            # DateTime fields are stored as %Y%m%d%H%M%S (better sorting)
             value = field_value.strftime('%Y%m%d%H%M%S')
         elif isinstance(content_type, (float, models.FloatField)):
             value = '%.10f' % value
+
+        return value
+
+    def resolve_one(self, value, name):
+        value = getattr(value, name)
+
+        if isinstance(value, models.Manager):
+            value = value.all()
+        elif callable(value):
+            value = value()
 
         return value
 
@@ -65,40 +70,25 @@ class Field(object):
         bits = self.path.split(".")
 
         for bit in bits:
-            try:
-                value = getattr(value, bit)
-            except AttributeError:
-                raise
-
-            if callable(value):
-                try:
-                    value = value()
-                except TypeError:
-                    raise
+            if is_iterable(value):
+                value = u', '.join(
+                    map(lambda v: force_unicode(self.resolve_one(v, bit)), value)
+                )
+            else:
+                value = self.resolve_one(value, bit)
 
         if isinstance(value, self.raw_types):
             return value
-        elif is_iterable(value):
-            return ", ".join(value)
-        elif isinstance(value, models.Manager):
-            return ", ".join(value.all())
-        return None
+        if is_iterable(value):
+            return u', '.join(map(force_unicode, value))
+
+        return value and force_unicode(value) or None
 
     def extract(self, document):
         if self.number:
             return document.get_value(self.number)
 
         return None
-
-def paginate(queue, page_size=1000):
-    from django.core.paginator import Paginator
-    paginator = Paginator(queue, page_size)
-
-    for num in paginator.page_range:
-        page = paginator.page(num)
-
-        for obj in page.object_list:
-            yield obj
 
 class Indexer(object):
     field_class = Field
@@ -118,28 +108,17 @@ class Indexer(object):
         Note that fields from other models can still be used in the index,
         but this model will be the one returned from search results.
         """
-        self._db = db
-        self._model = model
-        self._model_name = utils.model_name(model)
+        self._prepare(db, model)
 
-        self.fields = [] # Simple text fields
-        self.tags = [] # Prefixed fields
-        self.aliases = {}
-
-        #
         # Parse fields
-        # For each field checks if it is a tuple or a list and add it's
-        # weight
-        #
+        # For each field checks if it is a tuple or a list and add it's weight
         for field in self.__class__.fields:
             if isinstance(field, (tuple, list)):
                 self.fields.append(self.field_class(field[0], field[1]))
             else:
                 self.fields.append(self.field_class(field))
 
-        #
         # Parse prefixed fields
-        #
         valueno = self.free_values_start_number
 
         for field in self.__class__.tags:
@@ -183,7 +162,7 @@ class Indexer(object):
 
     # Public Indexer interface
 
-    def update(self, documents=None, after_index=None, transaction=False, flush=False):
+    def update(self, documents=None, after_index=None, per_page=10000, commit_each=False):
         """
         Update the database with the documents.
         There are some default value and terms in a document:
@@ -207,89 +186,71 @@ class Indexer(object):
         else:
             update_queue = documents
 
-        counter = [0]
-
-        def flush_each(count=1000):
-            """Flushes database every `count` documents"""
-            counter[0] += 1
-
-            if counter[0] % count == 0:
-                database.flush()
-
-        # make wrappers for transaction management
-        if transaction:
-            def begin():
-                database.begin_transaction(flush=flush)
-
-            def commit():
-                database.commit_transaction()
-
-            def cancel():
-                database.cancel_transaction()
-        else:
-            begin = commit = cancel = lambda: None
+        commiter = Commiter.create(commit_each)(
+            lambda: database.begin_transaction(flush=True),
+            database.commit_transaction,
+            database.cancel_transaction
+        )
 
         # Get each document received
-        for obj in paginate(update_queue):
-            begin()
+        for page in paginate(update_queue, per_page):
             try:
-                if not self.trigger(obj):
-                    self.delete(obj.pk, database)
-                    commit()
-                    continue
+                commiter.begin_page()
 
-                doc = xapian.Document()
-                #
-                # Add default terms and values
-                #
-                uid = self._create_uid(obj)
-                doc.add_term(self._create_uid(obj))
-                self._insert_meta_values(doc, obj)
+                for obj in page.object_list:
+                    commiter.begin_object()
 
-                generator = xapian.TermGenerator()
-                generator.set_database(database)
-                generator.set_document(doc)
-                generator.set_flags(xapian.TermGenerator.FLAG_SPELLING)
-
-                stem_lang = self._get_stem_language(obj)
-                if stem_lang:
-                    generator.set_stemmer(xapian.Stem(stem_lang))
-
-                for field in self.fields + self.tags:
-                    # Trying to resolve field value or skip it
                     try:
-                        value = field.resolve(obj)
-                    except AttributeError:
-                        continue
+                        if not self.trigger(obj):
+                            self.delete(obj.pk, database)
+                            continue
 
-                    if field.prefix:
-                        index_value = field.convert(value, self._model)
-                        if index_value is not None:
-                            doc.add_value(field.number, smart_unicode(index_value))
+                        doc = xapian.Document()
 
-                    prefix = smart_unicode(field.get_tag())
-                    generator.index_text(smart_unicode(value), field.weight, prefix)
-                    if prefix:  # if prefixed then also index without prefix
-                        generator.index_text(smart_unicode(value), field.weight)
+                        # Add default terms and values
+                        uid = self._create_uid(obj)
+                        doc.add_term(self._create_uid(obj))
+                        self._insert_meta_values(doc, obj)
 
-                database.replace_document(uid, doc)
-                #FIXME: ^ may raise InvalidArgumentError when word in
-                #         text larger than 255 simbols
-                if after_index:
-                    after_index(obj)
+                        generator = xapian.TermGenerator()
+                        generator.set_database(database)
+                        generator.set_document(doc)
+                        generator.set_flags(xapian.TermGenerator.FLAG_SPELLING)
 
-                commit()
-            except:
-                cancel()
+                        stem_lang = self._get_stem_language(obj)
+                        if stem_lang:
+                            generator.set_stemmer(xapian.Stem(stem_lang))
 
-            if transaction:
-                if not flush:
-                    flush_each()
-            else:
-                if flush:
-                    database.flush()
-                else:
-                    flush_each()
+                        for field in self.fields + self.tags:
+                            # Trying to resolve field value or skip it
+                            try:
+                                value = field.resolve(obj)
+                            except AttributeError:
+                                continue
+
+                            if field.prefix:
+                                index_value = field.convert(value, self._model)
+                                if index_value is not None:
+                                    doc.add_value(field.number, smart_unicode(index_value))
+
+                            prefix = smart_unicode(field.get_tag())
+                            generator.index_text(smart_unicode(value), field.weight, prefix)
+                            if prefix:  # if prefixed then also index without prefix
+                                generator.index_text(smart_unicode(value), field.weight)
+
+                        database.replace_document(uid, doc)
+                        if after_index:
+                            after_index(obj)
+
+                        commiter.commit_object()
+                    except Exception:
+                        commiter.cancel_object()
+                        raise
+
+                commiter.commit_page()
+            except Exception:
+                commiter.cancel_page()
+                raise
 
         database.flush()
 
@@ -316,6 +277,15 @@ class Indexer(object):
         self._db.clear()
 
     # Private Indexer interface
+    def _prepare(self, db, model=None):
+        """Initialize attributes"""
+        self._db = db
+        self._model = model
+        self._model_name = model and utils.model_name(model)
+
+        self.fields = [] # Simple text fields
+        self.tags = [] # Prefixed fields
+        self.aliases = {}
 
     def _get_meta_values(self, obj):
         if isinstance(obj, models.Model):
@@ -426,7 +396,9 @@ class CompositeIndexer(Indexer):
     def __init__(self, *indexers):
         from djapian.database import CompositeDatabase
 
-        self._db = CompositeDatabase([indexer._db for indexer in indexers])
+        self._prepare(
+            db=CompositeDatabase([indexer._db for indexer in indexers])
+        )
 
     def clear(self):
         raise NotImplementedError

@@ -1,5 +1,7 @@
 from django.test import TestCase
-from djapian.tests.utils import BaseTestCase, BaseIndexerTest, Entry, Person
+
+from djapian.tests.utils import BaseTestCase, BaseIndexerTest, Entry, Person, Comment
+from djapian.indexer import CompositeIndexer
 
 class IndexerSearchTextTest(BaseIndexerTest, BaseTestCase):
     def setUp(self):
@@ -13,7 +15,13 @@ class IndexerSearchTextTest(BaseIndexerTest, BaseTestCase):
         self.assertEqual(self.result[0].instance, self.entries[0])
 
     def test_result_list(self):
-        self.assertEqual([r.instance for r in self.result], self.entries[0:3])
+        result = [r.instance for r in self.result]
+        result.sort(key=lambda i: i.pk)
+
+        expected = self.entries[0:3]
+        expected.sort(key=lambda i: i.pk)
+
+        self.assertEqual(result, expected)
 
     def test_score(self):
         self.assert_(self.result[0].percent in (99, 100))
@@ -53,3 +61,13 @@ class CorrectedQueryStringTest(BaseIndexerTest, BaseTestCase):
         results = Entry.indexer.search("texte").spell_correction()
 
         self.assertEqual(results.get_corrected_query_string(), "text")
+
+class CompositeIndexerTest(BaseIndexerTest, BaseTestCase):
+    def setUp(self):
+        super(CompositeIndexerTest, self).setUp()
+        self.indexer = CompositeIndexer(Entry.indexer, Comment.indexer)
+
+    def test_search(self):
+        results = self.indexer.search('entry')
+
+        self.assertEqual(len(results), 4) # 3 entries + 1 comment

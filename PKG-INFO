@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: Djapian
-Version: 2.2.1
+Version: 2.3
 Summary: High-level Xapian full-text indexer integration for Django
 Home-page: http://code.google.com/p/djapian/
 Author: Alex Koshelev, Rafael "SDM" Sierra

@@ -5,10 +5,10 @@ from django.db import models
 from django.test import TestCase
 
 import djapian
-from djapian import Indexer, Field
 
 class Person(models.Model):
     name = models.CharField(max_length=150)
+    age = models.PositiveIntegerField(default=0)
 
     def __unicode__(self):
         return self.name
@@ -17,8 +17,9 @@ class Person(models.Model):
         app_label = "djapian"
 
 class Entry(models.Model):
+    title = models.CharField(max_length=250, primary_key=True)
+
     author = models.ForeignKey(Person, related_name="entries")
-    title = models.CharField(max_length=250)
     tags = models.CharField(max_length=250, null=True)
     created_on = models.DateTimeField(default=datetime.now)
     rating = models.FloatField(default=0)
@@ -39,9 +40,18 @@ class Entry(models.Model):
     class Meta:
         app_label = "djapian"
 
-class EntryIndexer(Indexer):
-    fields=["text"]
-    tags=[
+class Comment(models.Model):
+    entry = models.ForeignKey(Entry)
+
+    author = models.ForeignKey(Person)
+    text = models.TextField()
+
+    class Meta:
+        app_label = "djapian"
+
+class EntryIndexer(djapian.Indexer):
+    fields = ["text"]
+    tags = [
         ("author", "author.name"),
         ("title", "title", 3),
         ("tag", "tags", 2),
@@ -51,17 +61,25 @@ class EntryIndexer(Indexer):
         ("editors", "editors"),
         ('rating', 'rating'),
     ]
-    aliases={
+    aliases = {
         "title": "subject",
         "author": "user",
     }
-    trigger=lambda indexer, obj: obj.is_active
+    trigger = lambda indexer, obj: obj.is_active
 
-indexer = djapian.add_index(Entry, EntryIndexer, attach_as="indexer")
+class CommentIndexer(djapian.Indexer):
+    fields = ['text']
+    tags = [
+        ('author', 'author.name')
+    ]
+
+djapian.add_index(Entry, EntryIndexer, attach_as='indexer')
+djapian.add_index(Comment, CommentIndexer, attach_as='indexer')
 
 class BaseTestCase(TestCase):
     def tearDown(self):
         Entry.indexer.clear()
+        Comment.indexer.clear()
 
 class BaseIndexerTest(object):
     def setUp(self):
@@ -76,7 +94,7 @@ class BaseIndexerTest(object):
             ),
             Entry.objects.create(
                 author=self.person,
-                title="Another test entry",
+                title="Another test entry - second",
                 rating=3.6,
                 text="Another not useful text message for tests",
                 asset_count=5,
@@ -99,3 +117,13 @@ class BaseIndexerTest(object):
         ]
 
         Entry.indexer.update()
+
+        self.comments =[
+            Comment.objects.create(
+                entry=self.entries[0],
+                author=self.person,
+                text='Hey, I comment my own entry!'
+            )
+        ]
+
+        Comment.indexer.update()

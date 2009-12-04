@@ -9,7 +9,7 @@ Homepage: http://code.google.com/p/djapian/
 
 Package: python-django-djapian
 Architecture: all
-Depends: ${python:Depends}, ${misc:Depends}, python-django (>= 1.0), python-xapian (>= 1.0.2)
+Depends: ${python:Depends}, ${misc:Depends}, python-django (>= 1.1), python-xapian (>= 1.0.7)
 Description: Search API for Django with Xapian
  Use this package to allow full-text search in your Django Project.
  .

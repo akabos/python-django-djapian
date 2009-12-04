@@ -10,11 +10,11 @@ Homepage: http://code.google.com/p/djapian/
 Package: python-django-djapian
 Architecture: all
 Depends: ${python:Depends}, ${misc:Depends}, python-django (>= 1.1), python-xapian (>= 1.0.7)
-Description: Search API for Django with Xapian
- Use this package to allow full-text search in your Django Project.
+Description: Search API for Django using Xapian
+ Djapian provides full-text search in your Django project.
  .
- Most of the features provided by Xapian itself and Djapian in this case
- plays role only as Django-compatible adaptation.
+ Most features are provided by the Xapian library.  Djapian 
+ effectively serves as a Django-compatible adaptor for Xapian.
  .
  Djapian features
  .

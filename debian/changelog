@@ -1,14 +1,5 @@
-python-django-djapian (2.3-0.1) unstable; urgency=low
-
-  * Non-maintainer upload
-  * Imported Upstream version 2.3
-  * Bump Standards-Version to 3.8.3
-  * Add debian/watch file
-
- -- Mikhail Lukyanchenko <ml@uptimebox.ru>  Fri, 27 Nov 2009 15:00:09 +0300
-
-python-django-djapian (2.1.1-1) unstable; urgency=low
+python-django-djapian (2.3-1) unstable; urgency=low
 
   * Initial release (Closes: #528247)
 
- -- Mikhail Lukyanchenko <ml@zhishi.ru>  Mon, 11 May 2009 21:34:56 +0400
+ -- Mikhail Lukyanchenko <ml@uptimebox.ru>  Fri, 04 Dec 2009 18:39:11 +0300

@@ -7,7 +7,7 @@ Standards-Version: 3.8.3
 Section: python
 Homepage: http://code.google.com/p/djapian/
 Vcs-Git: git://github.com/uptimebox/python-django-djapian.git
-Vcs-Browse: http://github.com/uptimebox/python-django-djapian
+Vcs-Browser: http://github.com/uptimebox/python-django-djapian
 
 Package: python-django-djapian
 Architecture: all

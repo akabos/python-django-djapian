@@ -1,5 +1,6 @@
-python-django-djapian (2.3-1) unstable; urgency=low
+python-django-djapian (2.3.1-1) unstable; urgency=low
 
   * Initial release (Closes: #528247)
+  * 
 
- -- Mikhail Lukyanchenko <ml@uptimebox.ru>  Fri, 04 Dec 2009 18:39:11 +0300
+ -- Mikhail Lukyanchenko <ml@uptimebox.ru>  Sun, 20 Dec 2009 13:59:05 +0300

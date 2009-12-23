@@ -1,6 +1,6 @@
 Source: python-django-djapian
 Priority: optional
-Maintainer: Mikhail Lukyanchenko <ml@zhishi.ru>
+Maintainer: Mikhail Lukyanchenko <ml@uptimebox.ru>
 Build-Depends: debhelper (>= 7.0.50)
 Build-Depends-Indep: python-support
 Standards-Version: 3.8.3
